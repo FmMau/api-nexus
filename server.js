@@ -1,7 +1,7 @@
 require('dotenv').config();
 
 const express = require('express');
-const { MongoClient } = require('mongodb');
+const { MongoClient, ObjectId } = require('mongodb');
 const cors = require('cors');
 
 const app = express();
@@ -13,7 +13,7 @@ app.use(cors());
 // Configuración MongoDB
 // ─────────────────────────────────────────────────────────────
 const URI = process.env.MONGO_URI || 'mongodb://localhost:27017';
-const DB_NAME = 'banco_nexus';
+const DB_NAME = 'BancoNexus';
 
 let db;
 
@@ -81,7 +81,7 @@ app.get('/api/cuenta/:cuenta', async (req, res) => {
     }
 
     const cuentaDoc = await coleccion('cuentas').findOne({
-      cuenta: numeroCuenta,
+      numeroCuenta: numeroCuenta,
     });
 
     if (!cuentaDoc) {
@@ -89,14 +89,18 @@ app.get('/api/cuenta/:cuenta', async (req, res) => {
     }
 
     const clienteDoc = await coleccion('clientes').findOne({
-      curp: cuentaDoc.cliente,
+      _id: new ObjectId(cuentaDoc.clienteId),
     });
 
     res.json({
-      cuenta: cuentaDoc.cuenta,
+      cuenta: cuentaDoc.numeroCuenta,
+      tipo: cuentaDoc.tipo,
       saldo: cuentaDoc.saldo,
+      status: cuentaDoc.status,
       cliente: clienteDoc ? clienteDoc.nombre : 'Desconocido',
-      curp: cuentaDoc.cliente,
+      curp: clienteDoc ? clienteDoc.curp : null,
+      correo: clienteDoc ? clienteDoc.correo : null,
+      telefono: clienteDoc ? clienteDoc.telefono : null,
     });
   } catch (error) {
     console.error(error);
@@ -118,7 +122,7 @@ app.get('/api/historial/:cuenta', async (req, res) => {
     }
 
     const cuentaDoc = await coleccion('cuentas').findOne({
-      cuenta: numeroCuenta,
+      numeroCuenta: numeroCuenta,
     });
 
     if (!cuentaDoc) {
@@ -126,7 +130,9 @@ app.get('/api/historial/:cuenta', async (req, res) => {
     }
 
     const movimientos = await coleccion('transacciones')
-      .find({ cuenta: numeroCuenta })
+      .find({
+        cuentaId: cuentaDoc._id,
+      })
       .sort({ fecha: -1 })
       .toArray();
 
@@ -158,29 +164,34 @@ app.post('/api/deposito', async (req, res) => {
     }
 
     const cuentaDoc = await coleccion('cuentas').findOne({
-      cuenta,
+      numeroCuenta: cuenta,
     });
 
     if (!cuentaDoc) {
       return respuestaError(res, 404, 'Cuenta no encontrada');
     }
 
+    // Incrementar saldo
     await coleccion('cuentas').updateOne(
-      { cuenta },
+      {
+        numeroCuenta: cuenta,
+      },
       {
         $inc: { saldo: monto },
       }
     );
 
+    // Obtener cuenta actualizada
     const cuentaActualizada = await coleccion('cuentas').findOne({
-      cuenta,
+      numeroCuenta: cuenta,
     });
 
+    // Registrar transacción
     await coleccion('transacciones').insertOne({
-      cuenta,
-      tipo: 'deposito',
+      cuentaId: cuentaDoc._id,
       monto,
-      saldo: cuentaActualizada.saldo,
+      tipo: 'deposito',
+      concepto: 'Deposito realizado desde API',
       fecha: new Date(),
     });
 
@@ -215,7 +226,7 @@ app.post('/api/retiro', async (req, res) => {
     }
 
     const cuentaDoc = await coleccion('cuentas').findOne({
-      cuenta,
+      numeroCuenta: cuenta,
     });
 
     if (!cuentaDoc) {
@@ -226,22 +237,27 @@ app.post('/api/retiro', async (req, res) => {
       return respuestaError(res, 400, 'Saldo insuficiente');
     }
 
+    // Disminuir saldo
     await coleccion('cuentas').updateOne(
-      { cuenta },
+      {
+        numeroCuenta: cuenta,
+      },
       {
         $inc: { saldo: -monto },
       }
     );
 
+    // Obtener cuenta actualizada
     const cuentaActualizada = await coleccion('cuentas').findOne({
-      cuenta,
+      numeroCuenta: cuenta,
     });
 
+    // Registrar transacción
     await coleccion('transacciones').insertOne({
-      cuenta,
-      tipo: 'retiro',
+      cuentaId: cuentaDoc._id,
       monto,
-      saldo: cuentaActualizada.saldo,
+      tipo: 'retiro',
+      concepto: 'Retiro realizado desde API',
       fecha: new Date(),
     });
 
