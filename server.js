@@ -17,7 +17,7 @@ const DB_NAME = 'BancoNexus';
 
 let db;
 
-// Conectar a MongoDB
+// Conectar MongoDB
 async function conectarDB() {
   try {
     const client = new MongoClient(URI);
@@ -42,24 +42,23 @@ function coleccion(nombre) {
   return db.collection(nombre);
 }
 
-// Respuesta reutilizable de error
+// Respuesta de error
 function respuestaError(res, status, mensaje) {
   return res.status(status).json({
-    error: mensaje,
+    ok: false,
+    mensaje,
   });
 }
 
-// Validar cuenta
+// Validaciones
 function validarCuenta(cuenta) {
   return typeof cuenta === 'string' && cuenta.trim().length > 0;
 }
 
-// Validar monto
 function validarMonto(monto) {
   return typeof monto === 'number' && monto > 0;
 }
 
-// Validar sucursal
 function validarSucursal(sucursal) {
   return typeof sucursal === 'string' && sucursal.trim().length > 0;
 }
@@ -69,13 +68,14 @@ function validarSucursal(sucursal) {
 // ─────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
   res.json({
+    ok: true,
     mensaje: 'API Banco Nexus funcionando correctamente',
   });
 });
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/cuenta/:cuenta
-// Obtener saldo y datos del cliente
+// Obtener datos de cuenta
 // ─────────────────────────────────────────────────────────────
 app.get('/api/cuenta/:cuenta', async (req, res) => {
   try {
@@ -98,14 +98,22 @@ app.get('/api/cuenta/:cuenta', async (req, res) => {
     });
 
     res.json({
-      cuenta: cuentaDoc.numeroCuenta,
-      tipo: cuentaDoc.tipo,
-      saldo: cuentaDoc.saldo,
-      status: cuentaDoc.status,
-      cliente: clienteDoc ? clienteDoc.nombre : 'Desconocido',
-      curp: clienteDoc ? clienteDoc.curp : null,
-      correo: clienteDoc ? clienteDoc.correo : null,
-      telefono: clienteDoc ? clienteDoc.telefono : null,
+      ok: true,
+      cuenta: {
+        numeroCuenta: cuentaDoc.numeroCuenta,
+        tipo: cuentaDoc.tipo,
+        saldo: cuentaDoc.saldo,
+        status: cuentaDoc.status,
+        fechaApertura: cuentaDoc.fechaApertura,
+      },
+      cliente: clienteDoc
+        ? {
+            nombre: clienteDoc.nombre,
+            curp: clienteDoc.curp,
+            correo: clienteDoc.correo,
+            telefono: clienteDoc.telefono,
+          }
+        : null,
     });
   } catch (error) {
     console.error(error);
@@ -116,7 +124,7 @@ app.get('/api/cuenta/:cuenta', async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/historial/:cuenta
-// Obtener historial de movimientos
+// Obtener historial
 // ─────────────────────────────────────────────────────────────
 app.get('/api/historial/:cuenta', async (req, res) => {
   try {
@@ -141,7 +149,11 @@ app.get('/api/historial/:cuenta', async (req, res) => {
       .sort({ fecha: -1 })
       .toArray();
 
-    res.json(movimientos);
+    res.json({
+      ok: true,
+      total: movimientos.length,
+      movimientos,
+    });
   } catch (error) {
     console.error(error);
 
@@ -157,6 +169,7 @@ app.post('/api/deposito', async (req, res) => {
   try {
     const { cuenta, monto, sucursal } = req.body;
 
+    // Validaciones
     if (!validarCuenta(cuenta)) {
       return respuestaError(res, 400, 'Cuenta inválida');
     }
@@ -181,12 +194,11 @@ app.post('/api/deposito', async (req, res) => {
       return respuestaError(res, 404, 'Cuenta no encontrada');
     }
 
-    // Validar estado de cuenta
     if (cuentaDoc.status !== 'activa') {
-      return respuestaError(res, 400, 'Cuenta inactiva');
+      return respuestaError(res, 400, 'La cuenta está inactiva');
     }
 
-    // Incrementar saldo
+    // Actualizar saldo
     await coleccion('cuentas').updateOne(
       {
         numeroCuenta: cuenta,
@@ -196,7 +208,7 @@ app.post('/api/deposito', async (req, res) => {
       }
     );
 
-    // Obtener cuenta actualizada
+    // Obtener saldo actualizado
     const cuentaActualizada = await coleccion('cuentas').findOne({
       numeroCuenta: cuenta,
     });
@@ -212,8 +224,10 @@ app.post('/api/deposito', async (req, res) => {
     });
 
     res.json({
-      mensaje: 'Depósito realizado con éxito',
-      saldo: cuentaActualizada.saldo,
+      ok: true,
+      mensaje: 'Depósito realizado correctamente',
+      sucursal,
+      saldoActual: cuentaActualizada.saldo,
     });
   } catch (error) {
     console.error(error);
@@ -230,6 +244,7 @@ app.post('/api/retiro', async (req, res) => {
   try {
     const { cuenta, monto, sucursal } = req.body;
 
+    // Validaciones
     if (!validarCuenta(cuenta)) {
       return respuestaError(res, 400, 'Cuenta inválida');
     }
@@ -254,17 +269,15 @@ app.post('/api/retiro', async (req, res) => {
       return respuestaError(res, 404, 'Cuenta no encontrada');
     }
 
-    // Validar estado de cuenta
     if (cuentaDoc.status !== 'activa') {
-      return respuestaError(res, 400, 'Cuenta inactiva');
+      return respuestaError(res, 400, 'La cuenta está inactiva');
     }
 
-    // Validar saldo
     if (cuentaDoc.saldo < monto) {
       return respuestaError(res, 400, 'Saldo insuficiente');
     }
 
-    // Disminuir saldo
+    // Actualizar saldo
     await coleccion('cuentas').updateOne(
       {
         numeroCuenta: cuenta,
@@ -274,7 +287,7 @@ app.post('/api/retiro', async (req, res) => {
       }
     );
 
-    // Obtener cuenta actualizada
+    // Obtener saldo actualizado
     const cuentaActualizada = await coleccion('cuentas').findOne({
       numeroCuenta: cuenta,
     });
@@ -290,8 +303,10 @@ app.post('/api/retiro', async (req, res) => {
     });
 
     res.json({
-      mensaje: 'Retiro realizado con éxito',
-      saldo: cuentaActualizada.saldo,
+      ok: true,
+      mensaje: 'Retiro realizado correctamente',
+      sucursal,
+      saldoActual: cuentaActualizada.saldo,
     });
   } catch (error) {
     console.error(error);
