@@ -316,6 +316,46 @@ app.post('/api/retiro', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// GET /api/cuentas
+// Listar cuentas con información del cliente
+// ─────────────────────────────────────────────────────────────
+
+app.get('/api/cuentas', async (req, res) => {
+  try {
+    const cuentas = await coleccion('cuentas')
+      .aggregate([
+        {
+          $lookup: {
+            from: 'clientes',
+            localField: 'clienteId',
+            foreignField: '_id',
+            as: 'clienteInfo',
+          },
+        },
+        {
+          $unwind: {
+            path: '$clienteInfo',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $project: {
+            cuenta: '$numeroCuenta',
+            tipo: 1,
+            cliente: '$clienteInfo.nombre',
+          },
+        },
+      ])
+      .toArray();
+
+    res.json(cuentas);
+  } catch (error) {
+    console.error(error);
+    respuestaError(res, 500, 'Error interno del servidor');
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
 // Iniciar servidor
 // ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
