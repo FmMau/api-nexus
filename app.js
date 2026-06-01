@@ -3,12 +3,12 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
-const { connectDB } = require('./config/db');
+const { connectDB } = require('./src/config/db');        
 
-const authRoutes = require('./routes/authRoutes');
-const cuentaRoutes = require('./routes/cuentaRoutes');
-const beneficiarioRoutes = require('./routes/beneficiarioRoutes');
-const transferenciaRoutes = require('./routes/transferenciaRoutes');
+const authRoutes          = require('./src/routes/authRoutes');
+const cuentaRoutes        = require('./src/routes/cuentaRoutes');
+const beneficiarioRoutes  = require('./src/routes/beneficiarioRoutes');
+const transferenciaRoutes = require('./src/routes/transferenciaRoutes');
 
 const app = express();
 
