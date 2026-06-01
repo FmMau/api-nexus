@@ -6,16 +6,16 @@ API REST desarrollada con Node.js, Express y MongoDB Atlas para el sistema banca
 
 ## Tecnologías utilizadas
 
-| Tecnología     | Uso                                   |
-|----------------|---------------------------------------|
-| Node.js 20     | Runtime                               |
-| Express 4      | Framework HTTP                        |
-| MongoDB Atlas  | Base de datos administrada en la nube |
-| bcrypt         | Hash de contraseñas                   |
-| jsonwebtoken   | Autenticación stateless con JWT       |
-| dotenv         | Variables de entorno                  |
-| Docker + Swarm | Contenedorización y orquestación      |
-| GitHub Actions | CI/CD automatizado                    |
+| Tecnología | Uso |
+|---|---|
+| Node.js 20 | Runtime |
+| Express 4 | Framework HTTP |
+| MongoDB Atlas | Base de datos administrada en la nube |
+| bcrypt | Hash de contraseñas |
+| jsonwebtoken | Autenticación stateless con JWT |
+| dotenv | Variables de entorno |
+| Docker + Swarm | Contenedorización y orquestación |
+| GitHub Actions | CI/CD automatizado |
 
 ---
 
@@ -32,7 +32,6 @@ PORT=3001
 ALLOWED_ORIGIN=http://localhost:3000
 ```
 
----
 
 ## Instalación local
 
@@ -43,41 +42,89 @@ npm install
 # Modo desarrollo (con nodemon)
 npm run dev
 
-# Modo producción
-npm start
 ```
 
 ---
 
 ## Endpoints
 
+Todos los endpoints protegidos requieren el header:
+```
+Authorization: Bearer <token>
+```
+
 ### Autenticación — `/api/auth`
 
-| POST | `/api/auth/register` | Registro de cliente + apertura de cuenta
-| POST | `/api/auth/login`    | Login, retorna JWT                       
+| Método | Ruta | Descripción | Auth |
+|---|---|---|---|
+| POST | `/api/auth/register` | Registro de cliente + apertura de cuenta | No |
+| POST | `/api/auth/login` | Login, retorna JWT | No |
+
+**Body registro:**
+```json
+{
+  "nombre": "Ana López",
+  "correo": "ana@correo.com",
+  "contraseña": "secreto123",
+  "curp": "LOAA900101MDFXXX01",
+  "telefono": "5512345678"
+}
+```
+
+**Body login:**
+```json
+{
+  "correo": "ana@correo.com",
+  "contraseña": "secreto123"
+}
+```
 
 ---
 
 ### Cuenta — `/api/cuenta`
 
-| GET | `/api/cuenta/saldo`       | Saldo y datos de la cuenta 
-| GET | `/api/cuenta/movimientos` | Historial paginado (`?page=1&limit=20`) 
-| GET | `/api/cuenta/perfil`      | Datos del cliente y cuenta 
-| PUT | `/api/cuenta/perfil`      | Actualizar nombre y/o teléfono 
+| Método | Ruta | Descripción | Auth |
+|---|---|---|---|
+| GET | `/api/cuenta/saldo` | Saldo y datos de la cuenta | Si |
+| GET | `/api/cuenta/movimientos` | Historial paginado (`?page=1&limit=20`) | Si |
+| GET | `/api/cuenta/perfil` | Datos del cliente y cuenta | Si |
+| PUT | `/api/cuenta/perfil` | Actualizar nombre y/o teléfono | Si |
 
 ---
 
 ### Transferencias — `/api/transferencia`
 
-| POST | `/api/transferencia` | Transferencia entre cuentas (atómica)
+| Método | Ruta | Descripción | Auth |
+|---|---|---|---|
+| POST | `/api/transferencia` | Transferencia entre cuentas (atómica) | Si |
+
+**Body:**
+```json
+{
+  "cuentaOrigen": "1800000011",
+  "cuentaDestino": "1800000029",
+  "monto": 500.00,
+  "concepto": "Pago de renta"
+}
+```
 
 ---
 
 ### Beneficiarios — `/api/beneficiarios`
 
-| GET    | `/api/beneficiarios`     | Listar beneficiarios del usuario
-| POST   | `/api/beneficiarios`     | Agregar beneficiario 
-| DELETE | `/api/beneficiarios/:id` | Eliminar beneficiario 
+| Método | Ruta | Descripción | Auth |
+|---|---|---|---|
+| GET | `/api/beneficiarios` | Listar beneficiarios del usuario | Si |
+| POST | `/api/beneficiarios` | Agregar beneficiario | Si |
+| DELETE | `/api/beneficiarios/:id` | Eliminar beneficiario | Si |
+
+**Body agregar:**
+```json
+{
+  "numeroCuentaDestino": "1800000029",
+  "alias": "Mamá"
+}
+```
 
 ---
 
@@ -107,7 +154,7 @@ docker push tu-usuario/nexus-backend:latest
 ### 2. Configurar las instancias EC2
 
 ```bash
-# En las instancias
+# En las 3 instancias
 sudo apt update && sudo apt install -y docker.io
 sudo systemctl enable --now docker
 
@@ -147,9 +194,35 @@ Cada push a `main` dispara automáticamente:
 
 Ir a **Settings → Secrets and variables → Actions**:
 
-| `DOCKER_USERNAME` | Tu usuario de Docker Hub                   |
+| Secret | Valor |
+|---|---|
+| `DOCKER_USERNAME` | Tu usuario de Docker Hub |
 | `DOCKER_PASSWORD` | Tu contraseña o Access Token de Docker Hub |
-| `EC2_HOST`        | IP pública del Swarm Manager (EC2 #1)      |
-| `EC2_SSH_KEY`     | Contenido completo del archivo `.pem`      |
+| `EC2_HOST` | IP pública del Swarm Manager (EC2 #1) |
+| `EC2_SSH_KEY` | Contenido completo del archivo `.pem` |
 
 ---
+
+## Colecciones en MongoDB Atlas
+
+| Colección | Descripción |
+|---|---|
+| `clientes` | Datos del cliente (contraseña hasheada con bcrypt) |
+| `cuentas` | Número de cuenta, saldo y estado |
+| `transferencias` | Historial de movimientos aprobados |
+| `beneficiarios` | Cuentas destino guardadas por cliente |
+| `auditoria` | Log de todas las acciones del sistema |
+
+---
+
+## Número de cuenta
+
+Se genera automáticamente al registrar un cliente con el algoritmo:
+
+```
+base = "180" + id_secuencial (6 dígitos con ceros)
+dígito verificador = suma de dígitos del base % 10
+número final = base + dígito verificador  →  10 dígitos
+```
+
+Ejemplo: cliente #1 → `1800000011`
