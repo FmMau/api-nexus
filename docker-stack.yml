@@ -1,0 +1,38 @@
+version: '3.8'
+
+# ── Producción — Docker Swarm en AWS ─────────────────────────────────────────
+# Desplegar con:
+#   docker stack deploy -c docker-stack.yml nexus
+services:
+  backend:
+    image: ${DOCKER_USERNAME}/nexus-backend:latest   # imagen desde Docker Hub
+    deploy:
+      replicas: 2                                     # 2 réplicas — requerido por la rúbrica
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1                                # actualiza réplica por réplica (zero-downtime)
+        delay: 10s
+    ports:
+      - "3001:3001"
+    env_file:
+      - /home/ubuntu/nexus.env                        # env file en el manager de Swarm
+    networks:
+      - nexus-net
+
+networks:
+  nexus-net:
+    driver: overlay    # requerido por la rúbrica para comunicación entre nodos Swarm
+
+# ─── Pasos de despliegue en EC2 Manager ───────────────────────────────────────
+# 1. Copiar este archivo al manager:
+#      scp docker-stack.yml ubuntu@<IP-EC2-1>:~/
+# 2. Copiar el .env como nexus.env:
+#      scp backend/.env ubuntu@<IP-EC2-1>:~/nexus.env
+# 3. Desplegar:
+#      docker stack deploy -c docker-stack.yml nexus
+# 4. Verificar réplicas:
+#      docker service ls
+#      docker service ps nexus_backend

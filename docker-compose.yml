@@ -1,0 +1,19 @@
+version: '3.8'
+
+# ── Desarrollo local únicamente — NO usar en producción con Swarm ─────────────
+services:
+  backend:
+    build:
+      context: ./backend        # carpeta donde vive el Dockerfile del backend
+    container_name: nexus-backend
+    ports:
+      - "3001:3001"
+    env_file:
+      - ./backend/.env          # archivo con MONGODB_USER, MONGODB_PASSWORD, etc.
+    restart: unless-stopped
+
+# ─── Nota ─────────────────────────────────────────────────────────────────────
+# Para levantar en local:
+#   docker compose up --build
+# Para detener:
+#   docker compose down

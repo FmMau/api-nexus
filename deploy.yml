@@ -1,0 +1,61 @@
+name: Deploy Nexus Backend to Swarm
+
+on:
+  push:
+    branches: [main]          # se dispara en cada push a main
+
+jobs:
+  build-and-deploy:
+    name: Build → Push → Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1 ── Checkout del repositorio ─────────────────────────────────────────
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      # 2 ── Login en Docker Hub ───────────────────────────────────────────────
+      - name: Login Docker Hub
+        run: |
+          echo "${{ secrets.DOCKER_PASSWORD }}" \
+            | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      # 3 ── Build y Push de la imagen del backend ────────────────────────────
+      - name: Build & Push nexus-backend
+        run: |
+          docker build \
+            -t ${{ secrets.DOCKER_USERNAME }}/nexus-backend:latest \
+            -t ${{ secrets.DOCKER_USERNAME }}/nexus-backend:${{ github.sha }} \
+            ./backend
+          docker push ${{ secrets.DOCKER_USERNAME }}/nexus-backend:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/nexus-backend:${{ github.sha }}
+        # Se etiqueta también con el SHA del commit para trazabilidad
+
+      # 4 ── Deploy en Swarm vía SSH al EC2 Manager ───────────────────────────
+      - name: Deploy en Swarm via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}         # IP pública del Swarm Manager
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}        # contenido del archivo .pem
+          script: |
+            # Descargar imagen nueva en todos los nodos a través del manager
+            docker pull ${{ secrets.DOCKER_USERNAME }}/nexus-backend:latest
+
+            # Re-desplegar el stack — Swarm actualiza las réplicas sin downtime
+            docker stack deploy \
+              -c /home/ubuntu/docker-stack.yml \
+              --with-registry-auth \
+              nexus
+
+            # Verificación rápida
+            docker service ls
+            docker service ps nexus_backend --no-trunc | head -20
+
+# ─── Secrets requeridos en GitHub ─────────────────────────────────────────────
+# Settings → Secrets and variables → Actions → New repository secret
+#
+#   DOCKER_USERNAME   tu usuario de Docker Hub
+#   DOCKER_PASSWORD   tu contraseña o token de acceso de Docker Hub
+#   EC2_HOST          IP pública de la instancia EC2 Manager (EC2 #1)
+#   EC2_SSH_KEY       contenido completo del archivo .pem  (incluye -----BEGIN...)
