@@ -1,5 +1,5 @@
 # ── Etapa única — producción ──────────────────────────────────────────────────
-FROM node:20-alpine
+FROM --platform=linux/amd64 node:20-alpine
 
 # Directorio de trabajo dentro del contenedor
 WORKDIR /app
