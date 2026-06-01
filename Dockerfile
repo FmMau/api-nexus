@@ -1,5 +1,5 @@
 # ── Etapa única — producción ──────────────────────────────────────────────────
-FROM --platform=linux/amd64 node:20-alpine
+FROM node:20-alpine
 
 # Directorio de trabajo dentro del contenedor
 WORKDIR /app
@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Instalar SOLO dependencias de producción
-RUN npm ci --only=production
+RUN npm install --omit=dev --ignore-scripts && npm rebuild bcrypt
 
 # Copiar el resto del código fuente
 COPY . .
